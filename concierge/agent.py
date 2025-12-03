@@ -12,7 +12,7 @@ from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPServerPa
 
 from google.cloud import secretmanager
 from google.api_core.exceptions import GoogleAPICallError
-
+import google.auth
 
 vertexai.init(
     project=os.environ["GOOGLE_CLOUD_PROJECT"],
@@ -54,6 +54,14 @@ PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT")
 MAPS_SECRET_NAME_IN_GCP = "mcp-map-api-key" 
 # Get mcp api key
 maps_api_key=None
+## Tracking temp code to check who is executing this code, i.e which service account is running this code to handle permission error
+
+
+credentials, project = google.auth.default()
+if hasattr(credentials, "service_account_email"):
+    print(f"🕵️ Active Service Account: {credentials.service_account_email}")
+else:
+    print("⚠️ NOT using a Service Account. Using User/Default credentials.")
 try:
     maps_api_key = get_secret(
         secret_env_name="GOOGLE_API_KEY", 
