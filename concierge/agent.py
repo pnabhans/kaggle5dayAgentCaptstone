@@ -1,7 +1,7 @@
 import os
 import vertexai
 from dotenv import load_dotenv
-from google.adk.agents import LlmAgent, ToolContext # ToolContext is optional but good practice
+from google.adk.agents import LlmAgent
 from google.adk.models import Gemini
 from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPServerParams
@@ -14,26 +14,34 @@ vertexai.init(
 )
 
 # --- THE AGENT HOST CLASS (The Framework Glue) ---
-class TravelConciergeApp:
+class TravelConciergeApp(LlmAgent):
+
+    mcp_client: McpToolset | None = None
     def __init__(self):
-        """Initializes the Agent synchronously, with an empty tool list."""
-        self.model = Gemini(model="gemini-1.5-flash")
+        """Initializes the Agent synchronously, passing all configuration to the base class."""
         
-        self.agent = LlmAgent(
-            model=self.model,
-            name="travel_assistant",
-            instruction="You are a travel assistant. Use the provided MCP tools to search places and compute routes.",
-            tools=[] # Start empty! Tools loaded in set_up.
+        # 1. Define Model (Local variable, used for super().__init__ only)
+        model = Gemini(model="gemini-2.0-flash")
+
+        # 2. CRUCIAL FIX: Call the parent constructor (LlmAgent) FIRST!
+        # This initializes the Pydantic state and makes *THIS* object the Root Agent.
+        super().__init__(
+            model=model,
+            name="RootAgent",
+            instruction="You are a travel assistant and must use the loaded MCP tools.",
+            tools=[] # Tools are initially empty, to be loaded in set_up.
         )
-        # Store MCP reference to prevent garbage collection
-        self.mcp_client = None
+        
+        # 3. ELIMINATE REDUNDANCY: Remove 'self.agent = LlmAgent(...)'. 
+        # The 'self' object *is* the agent now.
+       
+
 
     async def set_up(self):
         """
         THE HOOK: Vertex AI calls this async method once at deployment startup.
-        This is where we safely connect to the MCP server.
+        We inject tools into the inherited list (self.tools).
         """
-        print("🪝 HOOK: Starting Async MCP Setup...")
         maps_key = os.getenv("MAP_API_KEY")
         
         if maps_key:
@@ -46,28 +54,28 @@ class TravelConciergeApp:
                     )
                 )
                 
-                # 2. Fetch the Tools (This requires 'await')
-                # No filtering: we get everything MCP provides.
+                # 2. Fetch the Tools (Async)
                 all_tools = await self.mcp_client.get_tools()
                 
-                # 3. Inject into the Agent
-                self.agent.tools.extend(all_tools)
+                # 3. Inject into the inherited tools list (self.tools)
+                self.tools.extend(all_tools)
                 print(f"✅ HOOK COMPLETE: Injected {len(all_tools)} MCP tools.")
                 
             except Exception as e:
                 print(f"❌ HOOK FAILED: Could not connect to MCP server: {e}")
-        else:
-            print("⚠️ WARNING: MAP_API_KEY missing. Agent running without maps.")
 
     async def query(self, message: str):
-        """Handles synchronous/single response queries."""
-        response = await self.agent.run_async(message)
+        """Handles synchronous/single response queries by running THIS object."""
+        # Fix: Call the inherited run_async method on self
+        response = await self.run_async(message)
         return response.text
 
     async def stream_query(self, message: str):
-        """Handles asynchronous streaming queries (for Kaggle testing)."""
-        response_stream = self.agent.run_stream(message)
+        """Handles asynchronous streaming queries by running THIS object."""
+        # Fix: Call the inherited run_stream method on self
+        response_stream = self.run_stream(message)
         async for chunk in response_stream:
             yield chunk.text
 
-# No global root_agent = ... or query function needed outside the class!
+# --- FINAL EXPORT ---
+root_agent = TravelConciergeApp()
