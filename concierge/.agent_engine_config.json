@@ -1,5 +1,7 @@
 {
     "min_instances": 0,
     "max_instances": 1,
-    "resource_limits": {"cpu": "1", "memory": "1Gi"}
+    "resource_limits": {"cpu": "1", "memory": "1Gi"},
+    "entry_point": "agent.py",
+    "class_name": "TravelConciergeApp"
 }

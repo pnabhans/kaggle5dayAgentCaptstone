@@ -1,5 +1,6 @@
 
-google-adk
-opentelemetry-instrumentation-google-genai
-mcp
+google-cloud-aiplatform
+google-genai>=0.3.0
+google-adk>=0.1.0
 python-dotenv
+mcp
