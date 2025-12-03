@@ -4,7 +4,6 @@ import asyncio
 from google.adk.agents import Agent
 from google.adk.models import Gemini
 from google.adk.tools.google_search_tool import google_search
-from google.adk.engine import AgentEngine # Import AgentEngine
 from google.genai import types
 
 # MCP Imports
@@ -12,8 +11,6 @@ from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPServerParams
 
 # 1. Setup Configuration
-# Note: In Vertex AI, ENV variables are set via the console or deployment parameters, 
-# but load_dotenv is fine for local testing.
 from dotenv import load_dotenv 
 load_dotenv()
 
@@ -26,8 +23,6 @@ retry_config = types.HttpRetryOptions(
 
 # 2. Define the Agent
 model = Gemini(model="gemini-1.5-flash-002", retry_options=retry_config) 
-# Note: "gemini-2.5-flash-lite" does not exist publicly yet. 
-# Use gemini-1.5-flash or gemini-1.5-pro for now.
 
 root_agent = Agent(
     model=model,
@@ -43,7 +38,7 @@ active_mcp_toolsets = []
 
 async def startup_sequence(app_state: Agent):
     """
-    This function runs ONCE when the container starts.
+    This function runs ONCE when the first query is received.
     It connects to MCP, gets tools, and attaches them to the agent.
     """
     print("--- Starting MCP Initialization ---")
@@ -70,15 +65,45 @@ async def startup_sequence(app_state: Agent):
         desired_tools = ["search_places", "compute_routes"]
         filtered_tools = [t for t in tool_list if t.name in desired_tools]
         
-       
-        app_state.tools=filtered_tools
+        # Append the new tools to the existing list safely
+        app_state.tools.extend(filtered_tools)
         
         print(f"Agent initialized. Total tools: {len(app_state.tools)}")
     except Exception as e:
         print(f"Failed to initialize MCP: {e}")
 
-# 4. Create the Engine App
+
+class AgentEngine:
+    def __init__(self, agent: Agent):
+        self.agent = agent
+        self._startup_fn = None
+        self._is_initialized = False
+
+    def register_startup(self, fn):
+        """Registers the async function to run before the first query."""
+        self._startup_fn = fn
+
+    async def query(self, message: str, **kwargs):
+        """
+        The method Vertex AI calls. 
+        """
+        # 1. Lazy Initialization (Run startup logic if it hasn't run yet)
+        if self._startup_fn and not self._is_initialized:
+            print("First request detected: Running startup sequence...")
+            await self._startup_fn(self.agent)
+            self._is_initialized = True
+
+        # 2. Run the actual Agent
+        # Note: Depending on your exact ADK version, this is usually .run() or .run_async()
+        # The ADK Agent handles the conversation loop.
+        response = await self.agent.run(message)
+        
+        # 3. Return string result (Vertex expects a string or valid JSON)
+        return response.text
+
+# 5. Create the Engine App
+# Vertex AI will load this object
 app = AgentEngine(root_agent)
 
-# 5. Register the Hook
+# 6. Register the Hook
 app.register_startup(startup_sequence)
