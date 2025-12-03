@@ -39,7 +39,6 @@ root_agent = Agent(
 )
 
 # 3. Define the Startup Logic
-# We keep the MCP toolset global or within the scope so it persists
 active_mcp_toolsets = []
 
 async def startup_sequence(app_state: Agent):
@@ -71,18 +70,15 @@ async def startup_sequence(app_state: Agent):
         desired_tools = ["search_places", "compute_routes"]
         filtered_tools = [t for t in tool_list if t.name in desired_tools]
         
-        # KEY STEP: Mutate the agent's tools list
-        # We append to the existing list (which contains google_search)
-        app_state.tools.extend(filtered_tools)
+       
+        app_state.tools=filtered_tools
         
         print(f"Agent initialized. Total tools: {len(app_state.tools)}")
     except Exception as e:
         print(f"Failed to initialize MCP: {e}")
 
 # 4. Create the Engine App
-# This is the object Vertex AI actually runs
 app = AgentEngine(root_agent)
 
 # 5. Register the Hook
-# This tells the engine: "Run this function before accepting traffic"
 app.register_startup(startup_sequence)
